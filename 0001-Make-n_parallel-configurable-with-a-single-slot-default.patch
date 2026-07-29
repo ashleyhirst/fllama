@@ -1,0 +1,286 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: AshleyHirst <ashley.hirst@gmail.com>
+Date: Wed, 29 Jul 2026 20:02:40 +0100
+Subject: Make n_parallel configurable with a single-slot default
+
+Co-Authored-By: Codex GPT-5 <codex@openai.com>
+---
+ assets/web/fllama_web_init.js         |  2 +-
+ lib/fllama_html.dart                  |  2 ++
+ lib/fllama_universal.dart             |  5 ++++-
+ lib/io/fllama_bindings_generated.dart |  4 ++++
+ lib/io/fllama_io_inference.dart       |  1 +
+ lib/misc/openai.dart                  | 13 ++++++++-----
+ src/fllama.cpp                        |  9 ++++++++-
+ src/fllama.h                          |  3 ++-
+ src/fllama_inference_queue.cpp        |  2 ++
+ src/fllama_inference_queue.h          |  3 ++-
+ src/fllama_wasm_entry.cpp             |  3 ++-
+ test/n_parallel_test.dart             | 26 ++++++++++++++++++++++++++
+ 12 files changed, 62 insertions(+), 11 deletions(-)
+ create mode 100644 test/n_parallel_test.dart
+
+diff --git a/assets/web/fllama_web_init.js b/assets/web/fllama_web_init.js
+index 17e8b3e..d13cbb7 100644
+--- a/assets/web/fllama_web_init.js
++++ b/assets/web/fllama_web_init.js
+@@ -14,7 +14,7 @@ const WLLAMA_PATHS = {
+ 
+ // Keep web default aligned with native fllama's
+ // ServerManager::DEFAULT_N_PARALLEL. Callers can override per request.
+-const DEFAULT_N_PARALLEL = 4;
++const DEFAULT_N_PARALLEL = 1;
+ 
+ let nextRequestId = 0;
+ let serverWllama = null;
+diff --git a/lib/fllama_html.dart b/lib/fllama_html.dart
+index df69bf9..b9966d5 100644
+--- a/lib/fllama_html.dart
++++ b/lib/fllama_html.dart
+@@ -21,6 +21,7 @@ Future<List<FllamaGpuMemoryInfo>> fllamaGpuMemoryInfoGetAll() async {
+ extension type _JSFllamaInferenceRequest._(JSObject _) implements JSObject {
+   external factory _JSFllamaInferenceRequest({
+     required int contextSize,
++    required int nParallel,
+     required String input,
+     required int maxTokens,
+     required String modelPath,
+@@ -50,6 +51,7 @@ Future<int> fllamaInference(
+ ) async {
+   final jsRequest = _JSFllamaInferenceRequest(
+     contextSize: dartRequest.contextSize,
++    nParallel: dartRequest.nParallel,
+     input: dartRequest.input,
+     maxTokens: dartRequest.maxTokens,
+     modelPath: dartRequest.modelPath,
+diff --git a/lib/fllama_universal.dart b/lib/fllama_universal.dart
+index 881b109..7e6f129 100644
+--- a/lib/fllama_universal.dart
++++ b/lib/fllama_universal.dart
+@@ -20,6 +20,7 @@ bool fllamaOutputIndicatesLoadError(String output) {
+ class FllamaInferenceRequest {
+   int
+   contextSize; // llama.cpp handled 0 fine. StableLM Zephyr became default (4096).
++  int nParallel;
+   String input;
+   int maxTokens;
+   String modelPath;
+@@ -70,6 +71,7 @@ class FllamaInferenceRequest {
+ 
+   FllamaInferenceRequest({
+     required this.contextSize,
++    this.nParallel = 1,
+     required this.input,
+     required this.maxTokens,
+     required this.modelPath,
+@@ -87,7 +89,7 @@ class FllamaInferenceRequest {
+     this.draftModelPath,
+     this.draftNMax,
+     this.draftPMin,
+-  });
++  }) : assert(nParallel > 0, 'nParallel must be greater than zero');
+ }
+ 
+ /// Represents a request to tokenize a string.
+@@ -140,6 +142,7 @@ Future<int> fllamaChat(
+ 
+   final inferenceRequest = FllamaInferenceRequest(
+     contextSize: request.contextSize,
++    nParallel: request.nParallel ?? 1,
+     input: text,
+     maxTokens: request.maxTokens,
+     modelPath: request.modelPath,
+diff --git a/lib/io/fllama_bindings_generated.dart b/lib/io/fllama_bindings_generated.dart
+index 7a44a50..f719f2a 100644
+--- a/lib/io/fllama_bindings_generated.dart
++++ b/lib/io/fllama_bindings_generated.dart
+@@ -184,6 +184,10 @@ final class fllama_inference_request extends ffi.Struct {
+   @ffi.Int()
+   external int context_size;
+ 
++  /// Required: number of concurrent server slots. Must be greater than zero.
++  @ffi.Int()
++  external int n_parallel;
++
+   /// Required: input text
+   external ffi.Pointer<ffi.Char> input;
+ 
+diff --git a/lib/io/fllama_io_inference.dart b/lib/io/fllama_io_inference.dart
+index ee37256..8247a86 100644
+--- a/lib/io/fllama_io_inference.dart
++++ b/lib/io/fllama_io_inference.dart
+@@ -111,6 +111,7 @@ Pointer<fllama_inference_request> _toNative(
+ 
+   request.request_id = requestId;
+   request.context_size = dart.contextSize;
++  request.n_parallel = dart.nParallel;
+   request.max_tokens = dart.maxTokens;
+   request.num_gpu_layers = dart.numGpuLayers;
+   request.num_threads = dart.numThreads;
+diff --git a/lib/misc/openai.dart b/lib/misc/openai.dart
+index eff9f12..ffb00b0 100644
+--- a/lib/misc/openai.dart
++++ b/lib/misc/openai.dart
+@@ -170,10 +170,10 @@ class OpenAiRequest {
+     // 4096, today it has 16384. 1000 tokens ~= 3 pages ~= 750 words ~= 3
+     // minutes reading time.
+     this.contextSize = 2048,
+-    // Optional web-only override for llama.cpp n_parallel. Native fllama sets
+-    // its own default internally. When null, web uses the native-aligned
+-    // fllama_web_init.js default.
+-    this.nParallel,
++    // Number of concurrent llama.cpp server slots. Each slot receives
++    // contextSize / nParallel tokens. Alan and other single-request apps
++    // should keep the default of 1 to use the full context and KV cache.
++    this.nParallel = 1,
+     // Optional logger.
+     this.logger,
+     this.jinjaTemplate,
+@@ -181,5 +181,8 @@ class OpenAiRequest {
+     this.draftModelPath,
+     this.draftNMax,
+     this.draftPMin,
+-  });
++  }) : assert(
++         nParallel == null || nParallel > 0,
++         'nParallel must be greater than zero',
++       );
+ }
+diff --git a/src/fllama.cpp b/src/fllama.cpp
+index c7bdc48..6a9f31f 100644
+--- a/src/fllama.cpp
++++ b/src/fllama.cpp
+@@ -185,7 +185,9 @@ static void run_inference(fllama_inference_request request,
+     params.n_batch          = std::min<int32_t>(request.context_size, 2048);
+     params.n_ubatch         = std::min<int32_t>(params.n_batch, 512);
+     params.flash_attn_type  = LLAMA_FLASH_ATTN_TYPE_AUTO;
+-    params.n_parallel       = ServerManager::DEFAULT_N_PARALLEL;
++    params.n_parallel       = request.n_parallel > 0
++                                  ? request.n_parallel
++                                  : ServerManager::DEFAULT_N_PARALLEL;
+     params.n_predict        = request.max_tokens;
+     params.sampling.temp    = request.temperature;
+     params.sampling.top_p   = request.top_p;
+@@ -195,6 +197,11 @@ static void run_inference(fllama_inference_request request,
+     params.use_jinja = true;
+     params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+ 
++    log_message("[fllama] n_parallel=" +
++                    std::to_string(params.n_parallel) +
++                    ", n_ctx=" + std::to_string(params.n_ctx),
++                request.dart_logger);
++
+     // Default is 8192 MiB — way too much for mobile/embedded.
+     // 0 = disable host-memory prompt caching entirely.
+     // The KV cache in the llama_context still handles prompt reuse;
+diff --git a/src/fllama.h b/src/fllama.h
+index 04b8d13..6262758 100644
+--- a/src/fllama.h
++++ b/src/fllama.h
+@@ -34,6 +34,7 @@ struct fllama_gpu_memory_info {
+ struct fllama_inference_request {
+   int request_id; // Required: unique ID for the request. Used for cancellation.
+   int context_size;        // Required: context size
++  int n_parallel;          // Required: concurrent server slots. Must be > 0.
+   char *input;             // Required: input text
+   int max_tokens;          // Required: max tokens to generate
+   char *model_path;        // Required: .ggml model file path
+@@ -89,4 +90,4 @@ EMSCRIPTEN_KEEPALIVE FFI_PLUGIN_EXPORT int fllama_get_gpu_memory_info(
+ }
+ #endif
+ 
+-#endif // FLLAMA_H
+\ No newline at end of file
++#endif // FLLAMA_H
+diff --git a/src/fllama_inference_queue.cpp b/src/fllama_inference_queue.cpp
+index 05bc4b7..1b823e1 100644
+--- a/src/fllama_inference_queue.cpp
++++ b/src/fllama_inference_queue.cpp
+@@ -52,6 +52,7 @@ ServerManager::~ServerManager() {
+ static bool params_match(const ServerResources &r,
+                          const common_params &params) {
+   return r.n_ctx        == params.n_ctx &&
++         r.n_parallel   == params.n_parallel &&
+          r.n_gpu_layers == params.n_gpu_layers &&
+          r.mmproj_path  == params.mmproj.path &&
+          r.draft_path   == params.speculative.draft.mparams.path &&
+@@ -148,6 +149,7 @@ ServerManager::get_or_create(const std::string &model_path,
+   auto *ctx_ptr = res->srv_ctx.get();
+   res->loop_thread = std::thread([ctx_ptr] { ctx_ptr->start_loop(); });
+   res->n_ctx        = params.n_ctx;
++  res->n_parallel   = params.n_parallel;
+   res->n_gpu_layers  = params.n_gpu_layers;
+   res->mmproj_path   = params.mmproj.path;
+   res->draft_path    = params.speculative.draft.mparams.path;
+diff --git a/src/fllama_inference_queue.h b/src/fllama_inference_queue.h
+index b6d5c4e..9deda69 100644
+--- a/src/fllama_inference_queue.h
++++ b/src/fllama_inference_queue.h
+@@ -33,6 +33,7 @@ struct ServerResources {
+ 
+   // Params that require a fresh server_context if changed.
+   int n_ctx         = 0;
++  int n_parallel    = 0;
+   int n_gpu_layers  = -1;
+   std::string mmproj_path;
+   std::string draft_path; // MTP/speculative drafter model path ("" if none)
+@@ -52,7 +53,7 @@ struct ServerResources {
+ // ---------------------------------------------------------------------------
+ class ServerManager {
+ public:
+-  static constexpr int DEFAULT_N_PARALLEL = 4;
++  static constexpr int DEFAULT_N_PARALLEL = 1;
+   static int MODEL_INACTIVITY_TIMEOUT_SEC;
+   static int CLEANUP_INTERVAL_SEC;
+ 
+diff --git a/src/fllama_wasm_entry.cpp b/src/fllama_wasm_entry.cpp
+index c80f6ab..e6990cc 100644
+--- a/src/fllama_wasm_entry.cpp
++++ b/src/fllama_wasm_entry.cpp
+@@ -43,6 +43,7 @@ void fllama_inference_export(
+   struct fllama_inference_request request;
+   request.request_id = request_id;
+   request.context_size = context_size;
++  request.n_parallel = 1;
+   request.input = input;
+   request.max_tokens = max_tokens;
+   request.model_path = model_path;
+@@ -63,4 +64,4 @@ void fllama_inference_export(
+ int main() {
+   // This might remain empty if you're primarily calling functions from
+   // JavaScript. Or perform any initialization needed.
+-}
+\ No newline at end of file
++}
+diff --git a/test/n_parallel_test.dart b/test/n_parallel_test.dart
+new file mode 100644
+index 0000000..b6785f3
+--- /dev/null
++++ b/test/n_parallel_test.dart
+@@ -0,0 +1,26 @@
++import 'package:fllama/fllama.dart';
++import 'package:test/test.dart';
++
++void main() {
++  test('OpenAiRequest defaults nParallel to one', () {
++    final request = OpenAiRequest(modelPath: '/tmp/model.gguf');
++
++    expect(request.nParallel, 1);
++  });
++
++  test('FllamaInferenceRequest defaults nParallel to one', () {
++    final request = FllamaInferenceRequest(
++      contextSize: 4096,
++      input: 'hello',
++      maxTokens: 16,
++      modelPath: '/tmp/model.gguf',
++      numGpuLayers: 0,
++      penaltyFrequency: 0,
++      penaltyRepeat: 1.1,
++      temperature: 0.7,
++      topP: 1,
++    );
++
++    expect(request.nParallel, 1);
++  });
++}

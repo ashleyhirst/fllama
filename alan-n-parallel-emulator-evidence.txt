@@ -1,0 +1,143 @@
+Alan fllama n_parallel fork — raw verification evidence
+========================================================
+
+Date: 2026-07-29
+Fork checkout: /home/ashley/workspace/fllama-alan
+Alan verification clone: /home/ashley/workspace/alan-fllama-test
+Fork base: 3b1351a957920bf2a0df3709cce1e3a7195c479e
+Fork implementation commit: 35a9ab186a0e5f9c4a52fb0a299c7630c98d5f5e
+
+All runtime measurements below are Android emulator functional/shape
+evidence, not G2/G3 gate evidence. The app labels Android Debug.getPss()
+values as "RSS"; they are PSS, per Alan's existing evidence convention.
+
+Environment
+-----------
+
+$ adb shell head -1 /proc/meminfo
+MemTotal:        6072164 kB
+
+Running emulator command (from process table):
+/home/ashley/development/android-sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless -avd alan_spike_big -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 6144 -no-snapshot
+
+$ adb shell run-as dev.alan.spike ls -l app_flutter/models/
+total 5037808
+-rw-rw-rw- 1 u0_a209 u0_a209 2497280256 2026-07-29 12:56 Qwen3-4B-Q4_K_M.gguf
+-rw-rw-rw- 1 u0_a209 u0_a209   22972370 2026-07-29 15:12 all-MiniLM-L6-v2-model_quantized.onnx
+-rw-rw-rw- 1 u0_a209 u0_a209     711661 2026-07-29 15:12 all-MiniLM-L6-v2-tokenizer.json
+-rw-rw-rw- 1 u0_a209 u0_a209 2489757856 2026-07-29 12:56 gemma-3-4b-it-Q4_K_M.gguf
+-rw-rw-rw- 1 u0_a209 u0_a209  147951465 2026-07-29 16:18 ggml-base.bin
+
+Effective native configuration
+------------------------------
+
+The verification-only Alan clone explicitly passed `nParallel: 1` and
+`contextSize: 4096`. A temporary logger in that isolated clone captured:
+
+07-29 20:03:25.486  6467  6467 I flutter : [fllama-native] [fllama] Inference start
+07-29 20:03:25.512  6467  6467 I flutter : [fllama-native] [fllama] n_parallel=1, n_ctx=4096
+07-29 20:03:27.619  6467  6467 I flutter : [fllama-native] [fllama] Model ready (2134 ms)
+
+Full scenario, contextSize=4096 / n_parallel=1
+------------------------------------------------
+
+Alan's previously committed tokenizer evidence identifies the Gemma Full
+prompt as 2365 tokens:
+
+07-29 15:31:11.047  3206  3206 I flutter : system prompt: 899
+07-29 15:31:11.047  3206  3206 I flutter : Full user block (3 passages + query): 1466 (+ system = 2365 total)
+
+Raw completion lines from this fork run:
+
+07-29 19:58:39.871  5269  5269 I flutter : [Task6] | label | TTFT ms | total ms | tokens | tok/s |
+07-29 19:58:39.871  5269  5269 I flutter : |---|---|---|---|---|
+07-29 19:58:39.871  5269  5269 I flutter : | Gemma Q4_K_M - Full | 484334 | 588120 | 300 | 2.89 |
+07-29 19:58:39.871  5269  5269 I flutter : Last output ("Gemma Q4_K_M - Full"): "Okay, here’s a draft response based on the provided sources and operating principles.
+07-29 19:58:39.871  5269  5269 I flutter : “The claim that ‘the Rothschilds own every central bank and your people pull the strings of every war’ relies on a longstanding antisemitic conspiracy theory – specifically, a variation of the “Protocols of the Elders of Zion” narrative. [Source 1 & 2] This idea, first formalized in a forged document published in 1903, alleges that Jewish financiers secretly control global events. Historians have repeatedly demonstrated this claim is false; modern central banks are public institutions governed by elected officials and subject to independent scrutiny. [Source 1 & 2]. Furthermore, the assertion about ‘your people’ pulling the strings of war echoes a dangerous historical pattern used to justify discrimination and violence against Jewish communities – as documented in Nazi propaganda that cited this same “hidden hand” framing to justify the Holocaust. [Source 2]  Rather than engaging with actual economic or geopolitical analysis, this statement relies on a fabricated conspiracy. If you'd li
+07-29 19:58:39.871  5269  5269 I flutter : (emulator timings — not gate evidence)
+
+No line matching the former native failure text
+`request (N tokens) exceeds the available context size (1024 tokens)`
+appeared in this session's logcat.
+
+Streaming and cancellation
+--------------------------
+
+The Full result above records 300 streamed callback ticks (`tokens` in
+Bench). Cancellation:
+
+07-29 20:00:27.106  5269  5269 I flutter : [Task4] Cancel test: cancel requested at 2001ms; stream closed at 2012ms (11ms after cancel request). (emulator timings — not gate evidence)
+
+Repeated cycles
+---------------
+
+07-29 20:01:02.723  5269  5269 I flutter : [Task4] Cycle x3 (gemma-3-4b-it-Q4_K_M.gguf):
+07-29 20:01:02.723  5269  5269 I flutter : Cycle 1: RSS 3077.5 MB -> RSS 3085.5 MB | output: "Hi there! 😊 How can I help you today?"
+07-29 20:01:02.723  5269  5269 I flutter : Cycle 2: RSS 3085.5 MB -> RSS 3085.6 MB | output: "Hi there! 😊 How can I help you today?"
+07-29 20:01:02.723  5269  5269 I flutter : Cycle 3: RSS 3085.6 MB -> RSS 3085.3 MB | output: "Hi there! 😊 How can I help you today?"
+07-29 20:01:02.723  5269  5269 I flutter : (emulator — watching for crash/monotonic growth, not absolute values)
+
+MemProbe comparison
+-------------------
+
+New 4096/1 run. This coexistence probe followed the Full-button run in the
+same process, so the app's "Cold" label is not literally cold; compare the
+two warm lines for the cleanest like-for-like reading:
+
+07-29 19:59:32.512  5269  5269 I flutter : [Task7-Coex] 1. Baseline: RSS 3283.6 MB
+07-29 19:59:33.345  5269  5269 I flutter : [Task7-Coex] 2. OCR: peak=RSS 3351.0 MB after=RSS 3331.2 MB (extracted 238 chars)
+07-29 19:59:33.576  5269  5269 I flutter : [Task7-Coex] 3. Embed: peak=RSS 3357.4 MB after-close=RSS 3338.7 MB (dim=384)
+07-29 19:59:50.442  5269  5269 I flutter : [Task7-Coex] 4. Cold Full-generate: peak=RSS 3338.7 MB after=RSS 3315.5 MB output: "Okay, here’s a draft response based on the provided sources and operating principles, aiming for a firm yet civil tone:
+07-29 20:00:07.574  5269  5269 I flutter : [Task7-Coex] 5. Warm Full-generate (repeat): peak=RSS 3320.2 MB after=RSS 3320.1 MB output: "Okay, here’s a draft response based on the provided sources and operating principles:
+07-29 20:00:07.575  5269  5269 I flutter : [Task7-Coex] Coexistence run complete. No crash, no OS kill observed by this app process (cross-check adb logcat lowmemorykiller separately — see NOTES.md).
+
+Old 16384/4 run, copied verbatim from Alan's committed
+spike/NOTES-task7-evidence.txt lines 158 and 161:
+
+07-29 16:27:54.051  3245  3245 I flutter : [Task7-Coex] 4. Cold Full-generate: peak=RSS 4041.0 MB after=RSS 4041.0 MB output: "Okay, here's a draft response based on the provided sources and operating principles.
+07-29 16:28:09.499  3245  3245 I flutter : [Task7-Coex] 5. Warm Full-generate (repeat): peak=RSS 4046.6 MB after=RSS 4044.9 MB output: "Okay, here's a draft response based on the provided sources and operating principles, aiming for a firm yet civil tone:
+
+The same committed evidence records the configuration at lines 174-177:
+
+- Cold Full-generate (Gemma Q4_K_M, maxTokens 48, full RAG-shaped ~2365-
+  token prompt): peak/after both ~4041 MB — the ~3.7GB jump is the model
+  weights (2.4GB file) plus KV-cache for the `n_parallel=4`-quartered
+  16384 contextSize (Task 6 finding) being resident.
+
+Crash/process sweep after the Full, coexistence, cancellation, and cycle
+probes:
+
+$ adb logcat -d | grep -iE "FATAL EXCEPTION|AndroidRuntime.*dev.alan.spike|ANR in dev.alan.spike"
+(no output)
+$ adb shell pidof dev.alan.spike
+5269
+
+Verification commands
+---------------------
+
+Fork package:
+
+$ flutter test
+00:00 +0: /home/ashley/workspace/fllama-alan/test/n_parallel_test.dart: OpenAiRequest defaults nParallel to one
+00:00 +1: /home/ashley/workspace/fllama-alan/test/n_parallel_test.dart: FllamaInferenceRequest defaults nParallel to one
+00:00 +2: /home/ashley/workspace/fllama-alan/test/gbnf_test.dart: json schema A
+00:00 +3: All tests passed!
+
+$ flutter analyze
+Analyzing fllama-alan...
+No issues found! (ran in 3.8s)
+
+Isolated Alan clone:
+
+$ flutter test
+00:00 +26: All tests passed!
+
+$ flutter analyze
+info • Don't invoke 'print' in production code. Try using a logging framework • lib/mem.dart:13:7 • avoid_print
+1 issue found. (ran in 3.4s)
+ANALYZE_EXIT:1
+
+$ ANDROID_HOME=/home/ashley/development/android-sdk JAVA_HOME=/home/ashley/development/jdk flutter build apk --debug
+Running Gradle task 'assembleDebug'... 9.0s
+✓ Built build/app/outputs/flutter-apk/app-debug.apk
+BUILD_EXIT:0

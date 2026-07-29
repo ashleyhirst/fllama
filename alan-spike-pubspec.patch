@@ -1,0 +1,14 @@
+diff --git a/spike/pubspec.yaml b/spike/pubspec.yaml
+--- a/spike/pubspec.yaml
++++ b/spike/pubspec.yaml
+@@ -31,8 +31,8 @@ dependencies:
+   # Phase 0 spike bindings (pinned; see NOTES.md for API survey).
+   fllama:
+     git:
+-      url: https://github.com/Telosnex/fllama.git
+-      ref: 3b1351a957920bf2a0df3709cce1e3a7195c479e
++      url: https://github.com/ashleyhirst/fllama.git
++      ref: 35a9ab186a0e5f9c4a52fb0a299c7630c98d5f5e
+   whisper_flutter_new: ^1.0.1
+   google_mlkit_text_recognition: ^0.16.0
+   path_provider: ^2.1.6
