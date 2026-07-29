@@ -185,7 +185,9 @@ static void run_inference(fllama_inference_request request,
     params.n_batch          = std::min<int32_t>(request.context_size, 2048);
     params.n_ubatch         = std::min<int32_t>(params.n_batch, 512);
     params.flash_attn_type  = LLAMA_FLASH_ATTN_TYPE_AUTO;
-    params.n_parallel       = ServerManager::DEFAULT_N_PARALLEL;
+    params.n_parallel       = request.n_parallel > 0
+                                  ? request.n_parallel
+                                  : ServerManager::DEFAULT_N_PARALLEL;
     params.n_predict        = request.max_tokens;
     params.sampling.temp    = request.temperature;
     params.sampling.top_p   = request.top_p;
@@ -194,6 +196,11 @@ static void run_inference(fllama_inference_request request,
     params.cpuparams.n_threads     = request.num_threads;
     params.use_jinja = true;
     params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
+
+    log_message("[fllama] n_parallel=" +
+                    std::to_string(params.n_parallel) +
+                    ", n_ctx=" + std::to_string(params.n_ctx),
+                request.dart_logger);
 
     // Default is 8192 MiB — way too much for mobile/embedded.
     // 0 = disable host-memory prompt caching entirely.

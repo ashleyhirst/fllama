@@ -184,6 +184,10 @@ final class fllama_inference_request extends ffi.Struct {
   @ffi.Int()
   external int context_size;
 
+  /// Required: number of concurrent server slots. Must be greater than zero.
+  @ffi.Int()
+  external int n_parallel;
+
   /// Required: input text
   external ffi.Pointer<ffi.Char> input;
 

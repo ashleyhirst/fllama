@@ -111,6 +111,7 @@ Pointer<fllama_inference_request> _toNative(
 
   request.request_id = requestId;
   request.context_size = dart.contextSize;
+  request.n_parallel = dart.nParallel;
   request.max_tokens = dart.maxTokens;
   request.num_gpu_layers = dart.numGpuLayers;
   request.num_threads = dart.numThreads;

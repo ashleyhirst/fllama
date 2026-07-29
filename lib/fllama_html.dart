@@ -21,6 +21,7 @@ Future<List<FllamaGpuMemoryInfo>> fllamaGpuMemoryInfoGetAll() async {
 extension type _JSFllamaInferenceRequest._(JSObject _) implements JSObject {
   external factory _JSFllamaInferenceRequest({
     required int contextSize,
+    required int nParallel,
     required String input,
     required int maxTokens,
     required String modelPath,
@@ -50,6 +51,7 @@ Future<int> fllamaInference(
 ) async {
   final jsRequest = _JSFllamaInferenceRequest(
     contextSize: dartRequest.contextSize,
+    nParallel: dartRequest.nParallel,
     input: dartRequest.input,
     maxTokens: dartRequest.maxTokens,
     modelPath: dartRequest.modelPath,

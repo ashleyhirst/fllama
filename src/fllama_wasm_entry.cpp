@@ -43,6 +43,7 @@ void fllama_inference_export(
   struct fllama_inference_request request;
   request.request_id = request_id;
   request.context_size = context_size;
+  request.n_parallel = 1;
   request.input = input;
   request.max_tokens = max_tokens;
   request.model_path = model_path;

@@ -34,6 +34,7 @@ struct fllama_gpu_memory_info {
 struct fllama_inference_request {
   int request_id; // Required: unique ID for the request. Used for cancellation.
   int context_size;        // Required: context size
+  int n_parallel;          // Required: concurrent server slots. Must be > 0.
   char *input;             // Required: input text
   int max_tokens;          // Required: max tokens to generate
   char *model_path;        // Required: .ggml model file path

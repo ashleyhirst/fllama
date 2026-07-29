@@ -33,6 +33,7 @@ struct ServerResources {
 
   // Params that require a fresh server_context if changed.
   int n_ctx         = 0;
+  int n_parallel    = 0;
   int n_gpu_layers  = -1;
   std::string mmproj_path;
   std::string draft_path; // MTP/speculative drafter model path ("" if none)
@@ -52,7 +53,7 @@ struct ServerResources {
 // ---------------------------------------------------------------------------
 class ServerManager {
 public:
-  static constexpr int DEFAULT_N_PARALLEL = 4;
+  static constexpr int DEFAULT_N_PARALLEL = 1;
   static int MODEL_INACTIVITY_TIMEOUT_SEC;
   static int CLEANUP_INTERVAL_SEC;
 

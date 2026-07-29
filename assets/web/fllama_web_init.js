@@ -14,7 +14,7 @@ const WLLAMA_PATHS = {
 
 // Keep web default aligned with native fllama's
 // ServerManager::DEFAULT_N_PARALLEL. Callers can override per request.
-const DEFAULT_N_PARALLEL = 4;
+const DEFAULT_N_PARALLEL = 1;
 
 let nextRequestId = 0;
 let serverWllama = null;

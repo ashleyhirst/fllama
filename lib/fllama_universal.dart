@@ -20,6 +20,7 @@ bool fllamaOutputIndicatesLoadError(String output) {
 class FllamaInferenceRequest {
   int
   contextSize; // llama.cpp handled 0 fine. StableLM Zephyr became default (4096).
+  int nParallel;
   String input;
   int maxTokens;
   String modelPath;
@@ -70,6 +71,7 @@ class FllamaInferenceRequest {
 
   FllamaInferenceRequest({
     required this.contextSize,
+    this.nParallel = 1,
     required this.input,
     required this.maxTokens,
     required this.modelPath,
@@ -87,7 +89,7 @@ class FllamaInferenceRequest {
     this.draftModelPath,
     this.draftNMax,
     this.draftPMin,
-  });
+  }) : assert(nParallel > 0, 'nParallel must be greater than zero');
 }
 
 /// Represents a request to tokenize a string.
@@ -140,6 +142,7 @@ Future<int> fllamaChat(
 
   final inferenceRequest = FllamaInferenceRequest(
     contextSize: request.contextSize,
+    nParallel: request.nParallel ?? 1,
     input: text,
     maxTokens: request.maxTokens,
     modelPath: request.modelPath,

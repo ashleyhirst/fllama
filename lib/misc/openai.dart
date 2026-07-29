@@ -170,10 +170,10 @@ class OpenAiRequest {
     // 4096, today it has 16384. 1000 tokens ~= 3 pages ~= 750 words ~= 3
     // minutes reading time.
     this.contextSize = 2048,
-    // Optional web-only override for llama.cpp n_parallel. Native fllama sets
-    // its own default internally. When null, web uses the native-aligned
-    // fllama_web_init.js default.
-    this.nParallel,
+    // Number of concurrent llama.cpp server slots. Each slot receives
+    // contextSize / nParallel tokens. Alan and other single-request apps
+    // should keep the default of 1 to use the full context and KV cache.
+    this.nParallel = 1,
     // Optional logger.
     this.logger,
     this.jinjaTemplate,
@@ -181,5 +181,8 @@ class OpenAiRequest {
     this.draftModelPath,
     this.draftNMax,
     this.draftPMin,
-  });
+  }) : assert(
+         nParallel == null || nParallel > 0,
+         'nParallel must be greater than zero',
+       );
 }
