@@ -34,10 +34,12 @@ if(ANDROID)
     
     # Only apply ARM-specific optimizations for ARM64 builds
     if(CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-        message(STATUS "ARM64 Android build - enabling dot product optimizations with KleiDiAI support")
-        # ARMv8.2-A with dot product only (i8mm not supported on this device)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv8.2-a+dotprod -O3")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8.2-a+dotprod -O3")
+        message(STATUS "ARM64 Android build - using baseline ARMv8-A for Redmi SM6225 compatibility")
+        # UNREVIEWED_DEMO compatibility build: the Redmi reference device has
+        # neither FEAT_LSE (`atomics`) nor dot-product (`asimddp`).  The former
+        # armv8.2-a+dotprod target emitted `ldadd` in cleanup_loop and SIGILLed.
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv8-a -mno-outline-atomics -O3")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a -mno-outline-atomics -O3")
         
         # Enable KleiDiAI ONLY for ARM64 builds (it's ARM64-specific)
         # Disabled: it requires CMake 4.0+ and src/CMakeLists.txt (via flutter template)
