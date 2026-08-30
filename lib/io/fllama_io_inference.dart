@@ -250,21 +250,6 @@ final Map<int, NativeCallable> _globalLoggerCallbacks = {};
 // receive-port handler returns even though fllama_inference() is asynchronous.
 final Map<int, NativeCallable> _globalInferenceCallbacks = {};
 
-// Track completed request IDs so we can clean up their logger callbacks safely
-final Set<int> _completedRequestIds = {};
-
-/// Clean up logger callbacks for completed requests.
-/// Called before starting a new request to prevent unbounded memory growth.
-void _cleanupCompletedLoggerCallbacks() {
-  for (final id in _completedRequestIds) {
-    final loggerCallback = _globalLoggerCallbacks.remove(id);
-    loggerCallback?.close();
-    final inferenceCallback = _globalInferenceCallbacks.remove(id);
-    inferenceCallback?.close();
-  }
-  _completedRequestIds.clear();
-}
-
 void _fllamaInferenceIsolate(SendPort sendPort) async {
   final ReceivePort helperReceivePort = ReceivePort();
   helperReceivePort.listen((dynamic data) {
@@ -279,10 +264,6 @@ void _fllamaInferenceIsolate(SendPort sendPort) async {
         throw UnsupportedError('Unsupported message type: ${data.runtimeType}');
       }
 
-      // Clean up logger callbacks from previously completed requests
-      // This is safe because at this point those requests are fully done on the C++ side
-      _cleanupCompletedLoggerCallbacks();
-
       final nativeRequestPointer = _toNative(
         data.request,
         data.id,
@@ -296,14 +277,14 @@ void _fllamaInferenceIsolate(SendPort sendPort) async {
         Pointer<Char> openaiReponseJsonStringPointer,
         int done,
       ) {
-        // NOTE: We do NOT close the logger callback here even when done == 1.
-        // This is because the C++ side may continue calling log_message() after
-        // signaling done=1 (e.g., during cleanup). Instead, we mark this request
-        // as completed, and the callback will be cleaned up when the NEXT request
-        // comes in. This prevents the crash in DLRT_GetFfiCallbackMetadata.
-        if (done == 1) {
-          _completedRequestIds.add(data.id);
-        }
+        // Keep both NativeCallables alive for the helper isolate's lifetime.
+        // `done=1` is an output event, not a native worker-joined signal: a
+        // following request can reach Dart and start before the prior C++
+        // worker has returned. Closing on that following request therefore
+        // races an early-EOS final callback and aborts the Dart VM. The native
+        // API currently has no worker-joined acknowledgement, so process-lifetime
+        // retention is the only safe ownership contract. Each entry is tiny
+        // relative to model memory and Alan runs one request at a time.
         // This is responsePointer.cast<Utf8>().toDartString(), inlined, in
         // order to allow only valid UTF-8.
         var decodedString = '';
