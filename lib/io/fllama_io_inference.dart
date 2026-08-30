@@ -245,6 +245,11 @@ void fllamaCancelInference(int requestId) async {
 // GLOBAL map to keep logger callbacks alive across ALL isolate invocations
 final Map<int, NativeCallable> _globalLoggerCallbacks = {};
 
+// Native inference callbacks must remain alive until the C++ worker has
+// returned completely. A local NativeCallable can be collected after the
+// receive-port handler returns even though fllama_inference() is asynchronous.
+final Map<int, NativeCallable> _globalInferenceCallbacks = {};
+
 // Track completed request IDs so we can clean up their logger callbacks safely
 final Set<int> _completedRequestIds = {};
 
@@ -252,8 +257,10 @@ final Set<int> _completedRequestIds = {};
 /// Called before starting a new request to prevent unbounded memory growth.
 void _cleanupCompletedLoggerCallbacks() {
   for (final id in _completedRequestIds) {
-    final callback = _globalLoggerCallbacks.remove(id);
-    callback?.close();
+    final loggerCallback = _globalLoggerCallbacks.remove(id);
+    loggerCallback?.close();
+    final inferenceCallback = _globalInferenceCallbacks.remove(id);
+    inferenceCallback?.close();
   }
   _completedRequestIds.clear();
 }
@@ -383,6 +390,7 @@ void _fllamaInferenceIsolate(SendPort sendPort) async {
       }
 
       callback = NativeCallable<NativeInferenceCallback>.listener(onResponse);
+      _globalInferenceCallbacks[data.id] = callback;
 
       fllamaBindings.fllama_inference(nativeRequest, callback.nativeFunction);
 
