@@ -87,6 +87,12 @@ class OpenAiRequest {
   final int contextSize;
   final int? nParallel;
   final String? jinjaTemplate;
+
+  /// Optional: when false, the chat template is rendered with thinking
+  /// disabled (Qwen3/Qwen3.5-style `enable_thinking` template variable), so
+  /// the model answers directly instead of emitting a reasoning channel.
+  /// null keeps llama.cpp's default (thinking enabled where supported).
+  final bool? enableThinking;
   final Function(String)? logger;
   final ToolChoice? toolChoice;
 
@@ -135,6 +141,7 @@ class OpenAiRequest {
       'presence_penalty': presencePenalty,
       if (toolChoice != null) 'tool_choice': toolChoice?.jsonName,
       if (jinjaTemplate != null) 'jinja_template': jinjaTemplate,
+      if (enableThinking != null) 'enable_thinking': enableThinking,
     };
     return jsonEncode(json);
   }
@@ -177,6 +184,7 @@ class OpenAiRequest {
     // Optional logger.
     this.logger,
     this.jinjaTemplate,
+    this.enableThinking,
     // Optional MTP/speculative drafter GGUF (native-only).
     this.draftModelPath,
     this.draftNMax,

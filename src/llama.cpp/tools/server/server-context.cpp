@@ -1328,6 +1328,14 @@ private:
                 if (f_keep < 0.5f) {
                     update_cache = true;
                 }
+                // Alan (fllama fork): when the host-RAM prompt cache is enabled, consult it
+                // whenever the selected slot is not already an exact prefix of the new
+                // prompt. Upstream only does so when f_keep < 0.5, which never triggers for
+                // prompts that share a long fixed system prefix (Reply/Explain shape) and
+                // therefore never restores a previously seen passage/card.
+                if (params_base.cache_ram_mib != 0 && sim_best < 1.0f) {
+                    update_cache = true;
+                }
             }
         }
 

@@ -49,6 +49,19 @@ ServerManager::~ServerManager() {
 }
 
 // ---------------------------------------------------------------------------
+static int ngram_n_of(const common_params &params) {
+  for (auto t : params.speculative.types)
+    if (t == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE)
+      return params.speculative.ngram_simple.size_n;
+  return 0;
+}
+static int ngram_m_of(const common_params &params) {
+  for (auto t : params.speculative.types)
+    if (t == COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE)
+      return params.speculative.ngram_simple.size_m;
+  return 0;
+}
+
 static bool params_match(const ServerResources &r,
                          const common_params &params) {
   return r.n_ctx        == params.n_ctx &&
@@ -57,7 +70,13 @@ static bool params_match(const ServerResources &r,
          r.mmproj_path  == params.mmproj.path &&
          r.draft_path   == params.speculative.draft.mparams.path &&
          r.draft_n_max  == params.speculative.draft.n_max &&
-         r.draft_p_min  == params.speculative.draft.p_min;
+         r.draft_p_min  == params.speculative.draft.p_min &&
+         r.n_threads    == params.cpuparams.n_threads &&
+         r.n_threads_batch == params.cpuparams_batch.n_threads &&
+         r.spec_ngram_n == ngram_n_of(params) &&
+         r.spec_ngram_m == ngram_m_of(params) &&
+         r.cache_ram_mib == params.cache_ram_mib &&
+         r.use_mmap     == params.use_mmap;
 }
 
 ServerResources *
@@ -155,6 +174,12 @@ ServerManager::get_or_create(const std::string &model_path,
   res->draft_path    = params.speculative.draft.mparams.path;
   res->draft_n_max   = params.speculative.draft.n_max;
   res->draft_p_min   = params.speculative.draft.p_min;
+  res->n_threads     = params.cpuparams.n_threads;
+  res->n_threads_batch = params.cpuparams_batch.n_threads;
+  res->spec_ngram_n  = ngram_n_of(params);
+  res->spec_ngram_m  = ngram_m_of(params);
+  res->cache_ram_mib = params.cache_ram_mib;
+  res->use_mmap      = params.use_mmap;
   res->last_used     = std::chrono::steady_clock::now();
   res->active_users.store(1);
 

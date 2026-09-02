@@ -194,19 +194,55 @@ static void run_inference(fllama_inference_request request,
     params.sampling.penalty_freq   = request.penalty_freq;
     params.sampling.penalty_repeat = request.penalty_repeat;
     params.cpuparams.n_threads     = request.num_threads;
+    // Alan: separate prompt-processing thread count (efficiency cores help
+    // prefill throughput but hurt decode latency on big.LITTLE SoCs).
+    params.cpuparams_batch.n_threads = request.num_threads_batch > 0
+                                           ? request.num_threads_batch
+                                           : request.num_threads;
+    if (request.inactivity_timeout_sec > 0) {
+      ServerManager::MODEL_INACTIVITY_TIMEOUT_SEC = request.inactivity_timeout_sec;
+    }
     params.use_jinja = true;
     params.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
 
-    log_message("[fllama] n_parallel=" +
-                    std::to_string(params.n_parallel) +
-                    ", n_ctx=" + std::to_string(params.n_ctx),
-                request.dart_logger);
+
+    // Alan: self-speculative n-gram decoding (no draft model). The target
+    // model verifies drafts copied from its own prompt/history, so greedy
+    // output is unchanged; only decode wall time changes.
+    if (request.spec_ngram_n > 0 &&
+        !(request.draft_model_path && strlen(request.draft_model_path) > 0)) {
+      params.speculative.types = { COMMON_SPECULATIVE_TYPE_NGRAM_SIMPLE };
+      params.speculative.ngram_simple.size_n = (uint16_t) request.spec_ngram_n;
+      if (request.spec_ngram_m > 0) {
+        params.speculative.ngram_simple.size_m = (uint16_t) request.spec_ngram_m;
+      }
+      log_message("[fllama] ngram-simple speculation enabled: size_n=" +
+                      std::to_string(params.speculative.ngram_simple.size_n) +
+                      ", size_m=" +
+                      std::to_string(params.speculative.ngram_simple.size_m),
+                  request.dart_logger);
+    }
 
     // Default is 8192 MiB — way too much for mobile/embedded.
     // 0 = disable host-memory prompt caching entirely.
     // The KV cache in the llama_context still handles prompt reuse;
     // this only controls the EXTRA host-RAM cache from PR #16391.
-    params.cache_ram_mib = 0;
+    params.cache_ram_mib = request.cache_ram_mib > 0 ? request.cache_ram_mib : 0;
+    if (request.no_mmap) {
+      params.use_mmap = false;
+    }
+
+    log_message("[fllama] n_parallel=" +
+                    std::to_string(params.n_parallel) +
+                    ", n_ctx=" + std::to_string(params.n_ctx) +
+                    ", n_threads=" + std::to_string(params.cpuparams.n_threads) +
+                    ", n_threads_batch=" +
+                    std::to_string(params.cpuparams_batch.n_threads) +
+                    ", idle_timeout_sec=" +
+                    std::to_string(ServerManager::MODEL_INACTIVITY_TIMEOUT_SEC) +
+                    ", use_mmap=" + std::to_string(params.use_mmap ? 1 : 0) +
+                    ", cache_ram_mib=" + std::to_string(params.cache_ram_mib),
+                request.dart_logger);
 
 #if TARGET_IPHONE_SIMULATOR
     params.n_gpu_layers = 0;
@@ -301,6 +337,17 @@ static void run_inference(fllama_inference_request request,
           // request body to override explicitly.
           inputs.reasoning_format = COMMON_REASONING_FORMAT_AUTO;
           inputs.enable_thinking = true;
+          // Alan: honour an explicit request-body switch so reasoning models
+          // (Qwen3/Qwen3.5) can be run with thinking disabled, matching the
+          // lab's `--chat-template-kwargs {"enable_thinking":false}`.
+          if (body.contains("enable_thinking") && body["enable_thinking"].is_boolean()) {
+            inputs.enable_thinking = body["enable_thinking"].get<bool>();
+            inputs.chat_template_kwargs["enable_thinking"] =
+                inputs.enable_thinking ? "true" : "false";
+            log_message(std::string("[fllama] enable_thinking=") +
+                            (inputs.enable_thinking ? "true" : "false"),
+                        request.dart_logger);
+          }
           if (body.contains("reasoning_format") && body["reasoning_format"].is_string()) {
             inputs.reasoning_format = common_reasoning_format_from_name(
                 body["reasoning_format"].get<std::string>());

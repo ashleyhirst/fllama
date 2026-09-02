@@ -259,6 +259,30 @@ final class fllama_inference_request extends ffi.Struct {
   /// < 0 uses llama.cpp default.
   @ffi.Float()
   external double draft_p_min;
+
+  /// Optional: threads for prompt processing (prefill). <= 0 uses num_threads.
+  @ffi.Int()
+  external int num_threads_batch;
+
+  /// Optional: > 0 enables self-speculative ngram-simple decoding (lookup size).
+  @ffi.Int()
+  external int spec_ngram_n;
+
+  /// Optional: m-gram draft length for ngram-simple. <= 0 uses the default.
+  @ffi.Int()
+  external int spec_ngram_m;
+
+  /// Optional: > 0 overrides the idle-eviction timeout (seconds).
+  @ffi.Int()
+  external int inactivity_timeout_sec;
+
+  /// Optional: 1 = read weights into RAM instead of mmap.
+  @ffi.Int()
+  external int no_mmap;
+
+  /// Optional: > 0 enables the host-RAM prompt cache with this MiB budget.
+  @ffi.Int()
+  external int cache_ram_mib;
 }
 
 typedef fllama_log_callback =

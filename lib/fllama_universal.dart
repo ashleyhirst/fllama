@@ -69,6 +69,33 @@ class FllamaInferenceRequest {
   /// such as 0.95–0.99 when [draftNMax] is high.
   double? draftPMin;
 
+  /// Optional: threads for prompt processing (prefill). null/<= 0 uses
+  /// [numThreads]. On big.LITTLE SoCs more threads help prefill throughput
+  /// while fewer threads keep decode latency stable.
+  int? numThreadsBatch;
+
+  /// Optional: > 0 enables llama.cpp self-speculative "ngram-simple" decoding
+  /// with this n-gram lookup size. No draft model is needed; greedy output is
+  /// unchanged, only decode wall time. Load-time parameter.
+  int? specNgramN;
+
+  /// Optional: m-gram draft length for [specNgramN]. null/<= 0 uses the
+  /// llama.cpp default (48).
+  int? specNgramM;
+
+  /// Optional: > 0 overrides the native idle-eviction timeout (seconds) for
+  /// cached model contexts. The default is 120 s.
+  int? inactivityTimeoutSec;
+
+  /// Optional: true reads the weights into RAM instead of mmap (load-time
+  /// parameter; changes cold-load behaviour only).
+  bool? noMmap;
+
+  /// Optional: > 0 enables llama.cpp's host-RAM prompt cache (saved KV of
+  /// previous prompts, restored on a prefix hit) with this MiB budget.
+  /// fllama's default is disabled (0). Load-time parameter.
+  int? cacheRamMib;
+
   FllamaInferenceRequest({
     required this.contextSize,
     this.nParallel = 1,
@@ -89,6 +116,12 @@ class FllamaInferenceRequest {
     this.draftModelPath,
     this.draftNMax,
     this.draftPMin,
+    this.numThreadsBatch,
+    this.specNgramN,
+    this.specNgramM,
+    this.inactivityTimeoutSec,
+    this.noMmap,
+    this.cacheRamMib,
   }) : assert(nParallel > 0, 'nParallel must be greater than zero');
 }
 

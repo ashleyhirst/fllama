@@ -119,6 +119,12 @@ Pointer<fllama_inference_request> _toNative(
   request.top_p = dart.topP;
   request.penalty_freq = dart.penaltyFrequency;
   request.penalty_repeat = dart.penaltyRepeat;
+  request.num_threads_batch = dart.numThreadsBatch ?? 0;
+  request.spec_ngram_n = dart.specNgramN ?? 0;
+  request.spec_ngram_m = dart.specNgramM ?? 0;
+  request.inactivity_timeout_sec = dart.inactivityTimeoutSec ?? 0;
+  request.no_mmap = (dart.noMmap ?? false) ? 1 : 0;
+  request.cache_ram_mib = dart.cacheRamMib ?? 0;
 
   // Convert the Dart string to a C string (null-terminated).
   Pointer<Utf8> inputCstr = dart.input.toNativeUtf8();

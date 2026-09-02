@@ -69,6 +69,19 @@ struct fllama_inference_request {
                            // draft_model_path is set. <= 0 falls back to 3.
   float draft_p_min;       // Optional: minimum drafter top-token probability.
                            // < 0 uses llama.cpp default.
+  // --- Alan runtime knobs (appended; zero = "unset", keep prior behaviour) ---
+  int num_threads_batch;   // Optional: threads for prompt processing (prefill).
+                           // <= 0 uses num_threads. Load-time param.
+  int spec_ngram_n;        // Optional: > 0 enables self-speculative "ngram-simple"
+                           // decoding with this n-gram lookup size (no draft model).
+  int spec_ngram_m;        // Optional: m-gram draft length for ngram-simple.
+                           // <= 0 uses llama.cpp default (48).
+  int inactivity_timeout_sec; // Optional: > 0 overrides the idle-eviction timeout
+                              // for cached model contexts (default 120 s).
+  int no_mmap;             // Optional: 1 = read weights into RAM instead of mmap.
+  int cache_ram_mib;       // Optional: > 0 enables llama.cpp's host-RAM prompt
+                           // cache (KV of previous prompts) with this budget.
+                           // 0 keeps fllama's default (disabled).
 };
 
 EMSCRIPTEN_KEEPALIVE FFI_PLUGIN_EXPORT void fllama_inference(struct fllama_inference_request request,

@@ -39,6 +39,12 @@ struct ServerResources {
   std::string draft_path; // MTP/speculative drafter model path ("" if none)
   int draft_n_max = 0;    // MTP/speculative max draft tokens; load-time param
   float draft_p_min = -1; // MTP/speculative min draft confidence; load-time param
+  int n_threads = 0;        // Alan: llama_context thread counts are load-time params
+  int n_threads_batch = 0;
+  int spec_ngram_n = 0;     // Alan: ngram-simple size_n (0 = off); load-time param
+  int spec_ngram_m = 0;
+  int cache_ram_mib = 0;    // Alan: host-RAM prompt cache budget; load-time param
+  bool use_mmap = true;
 
   ServerResources() = default;
   ~ServerResources(); // terminates loop, joins thread
